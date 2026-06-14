@@ -1,5 +1,5 @@
 
-import api.routes.SensorData
+from api.routes import SensorData
 
 def parse_data(data : SensorData):
 
