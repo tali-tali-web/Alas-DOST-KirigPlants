@@ -92,7 +92,7 @@ def store_sensor_data(sensor_data : routes.SensorData):
         command = "INSERT INTO Sample (device_id, adc, timestamp) VALUES (%s, %s, %s);" 
         parameters = []
         for i, value in enumerate(sensor_data.raw_adc):
-            timestamp = sensor_data.received_at + timedelta(i / (len(sensor_data.raw_adc) - 1))
+            timestamp = sensor_data.received_at + timedelta(seconds = i / (len(sensor_data.raw_adc) - 1))
             parameters.append((device_id, value, timestamp,))
 
         cursor.executemany(command, parameters) 
