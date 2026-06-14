@@ -5,4 +5,4 @@ def parse_data(data : SensorData):
 
     # DO some cleaning up here
 
-    return SensorData
+    return data

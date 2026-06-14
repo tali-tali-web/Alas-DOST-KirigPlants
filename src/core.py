@@ -20,13 +20,15 @@ if __name__ == "__main__":
     database = None 
     
     try:
-        database, cursor = postgresql.initialize_database(DATABASE_PARAMETERS)
+
+        database = postgresql.initialize_database(DATABASE_PARAMETERS)
 
         print("[+] Succesfully connected to KirigPlants database!")
 
-        uvicorn.run("api.routes:router", host="0.0.0.0", port=8000, reload=True)
+        uvicorn.run("api.routes:router", host="0.0.0.0", port=8000)
     except Exception as e:
         print(e)
+
     finally:
         if database is not None:
             database.close()
