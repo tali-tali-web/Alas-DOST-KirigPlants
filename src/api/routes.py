@@ -6,12 +6,9 @@ from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field
 from datetime import datetime, UTC
 
-
 router = FastAPI()
 
-#router.add_middleware(HTTPSRedirectMiddleware)
-
-API_KEY = "something-stupid-over-here"  
+API_KEY = None  
 
 class SensorData(BaseModel):
     esp_chip_id : str = Field(min_length=12, max_length=12)
@@ -19,7 +16,7 @@ class SensorData(BaseModel):
     received_at : str
     raw_adc : list[int] 
 
-from processing import parser
+from processing import funnel
 from api import postgresql
 
 
@@ -27,11 +24,13 @@ from api import postgresql
 async def receive_data(data : SensorData, x_api_key : str = Header()):
 
     data.received_at = datetime.now(UTC)
-    if x_api_key != API_KEY:
+    if x_api_key != API_KEY and API_KEY != None:
         raise HTTPException(status_code=401, detail="Invalid API key")
 
-    processed = parser.parse_data(data) 
-    postgresql.store_sensor_data(processed)
+    funnel.add_queue(data)
+    # removing thread unsafe code
+    #processed = parser.clean_data(data) 
+    #postgresql.store_sensor_data(processed)
 
     return {"status": "received", "received_at" : data.received_at}
 

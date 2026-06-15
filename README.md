@@ -2,12 +2,12 @@
 For the Mindanao Cup 2026 Ideathon! 
 
 To Do:
-- [ ] Add authentication
+- [x] Add authentication
 - [ ] Attempt to establish TLS or HTTPS data transfer
-- [ ] Make the settings.conf actually work
+- [x] Make the settings.conf actually work
 - [ ] Add data validation to ensure the SPS actually matches with the settings in the conf file
 - [ ] Correct the requirements.txt
-- [ ] Attach the parser.py
-- [ ] Make it more concurrent
+- [x] Attach the (parser.py) It's called funnel.py now since I changed the data fow slightly
+- [-] Make it more concurrent (Nevermind this, I'll stick with making everything synchronous)
 - [ ] 
 - [ ]
