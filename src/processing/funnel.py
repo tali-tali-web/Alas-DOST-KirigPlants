@@ -2,21 +2,41 @@
 from api import postgresql, routes
 from queue import Queue
 
-window_length = -1
-sensor_data_queue = Queue()
+import asyncio
 
-def clean_sensor_data(sensor_data : routes.SensorData):
-    return sensor_data
 
-def add_queue(sensor_data : routes.SensorData):
-    sensor_data_queue.put(sensor_data)
 
-def handle_queue():
-    while True:
-        sensor_data = sensor_data_queue.get()
-        if not isinstance(sensor_data, routes.SensorData):
-            raise TypeError(f'Expected SensorData type but got {0}'.format(type(sensor_data)))
 
-        cleaned_sensor_data = clean_sensor_data(sensor_data)
-        postgresql.store_sensor_data(cleaned_sensor_data)
+async def assign_new_context(esp_chip_id : str):
+    pass
+
+
+
+alpha = 0
+context = {}
+lock = asyncio.Lock()
+
+async def iterate(esp_chip_id : str, timestamp : str, value : int):
+    global lock, context, alpha
+
+    normalized = None
+    async with lock:
+
+        if esp_chip_id not in context or not context[esp_chip_id][0]:
+            context[esp_chip_id] = (True, value, 0)
+            return value
+
+        _, previous_ema, previous_variance = context[esp_chip_id]
+
+        current_ema = value * alpha + previous_ema * (1.0 - alpha)   
+        current_variance = math.sqrt((1 - alpha) * (previous_variance + alpha * (value - previous_ema) ** 2))
+        
+        context[esp_chip_id] = (True, current_ema, current_variance)
+        
+        normalized = (value - current_ema) / max(0.00001, current_variance)
+        
+    return normalized
+
+    
+
 

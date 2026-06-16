@@ -28,7 +28,7 @@ def initialize_database(DATABASE_PARAMETERS):
                 esp_chip_id CHAR(12) UNIQUE NOT NULL, 
                 plant_name TEXT NOT NULL,
                 start TIMESTAMPTZ NOT NULL
-            );
+            ); 
 
             CREATE TABLE IF NOT EXISTS Sample (
                 id SERIAL PRIMARY KEY,
@@ -60,6 +60,7 @@ def initialize_database(DATABASE_PARAMETERS):
 @if_online
 def generate_device_table(sensor_data : routes.SensorData, cursor = None):
 
+    created = False 
     temporary = False
     if cursor is None:
         temporary = True  
@@ -76,18 +77,46 @@ def generate_device_table(sensor_data : routes.SensorData, cursor = None):
         cursor.execute("SELECT device_id FROM Device WHERE esp_chip_id=%s LIMIT 1;", (sensor_data.esp_chip_id,))
 
         fetched = cursor.fetchone()
+        created = True
 
     if temporary:
         cursor.close()
 
-    return fetched[0]       
+    return fetched[0], created       
+
+
+@if_online
+def latest_sensor_data(device_id : str, window_length : int):
+    
+    window = None
+
+    with State.database.cursor() as cursor:
+        
+        cursor.execute("SELECT * FROM sample WHERE device_id=%s ORDER BY timestamp ASC LIMIT %s;", (device_id, window_length,))
+        window = cursor.fetchall()
+
+    if window == None or len(window) < window_length:
+        window = [0 for _ in range(window_length-len(window))].extend(window)
+
+    return window 
+
+@if_online
+def list_devices():
+
+    devices = None
+
+    with State.database.cursor() as cursor:
+        cursor.execute("SELECT device_id, esp_chip_id FROM device;");
+        devices = cursor.fetchall()
+
+    return devices
 
 @if_online
 def store_sensor_data(sensor_data : routes.SensorData):
 
     with State.database.cursor() as cursor:
 
-        device_id = generate_device_table(sensor_data, cursor)
+        device_id, created = generate_device_table(sensor_data, cursor)
 
         command = "INSERT INTO Sample (device_id, adc, timestamp) VALUES (%s, %s, %s);" 
         parameters = []
@@ -98,3 +127,4 @@ def store_sensor_data(sensor_data : routes.SensorData):
         cursor.executemany(command, parameters) 
         cursor.connection.commit()
  
+    return created

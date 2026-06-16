@@ -8,6 +8,6 @@ To Do:
 - [ ] Add data validation to ensure the SPS actually matches with the settings in the conf file
 - [ ] Correct the requirements.txt
 - [x] Attach the (parser.py) It's called funnel.py now since I changed the data fow slightly
-- [-] Make it more concurrent (Nevermind this, I'll stick with making everything synchronous)
-- [ ] 
+- [-] Make it more concurrent (Nevermind this, I'll stick with making it as synchronous as possible)
+- [ ] Add a context window for each device and a method to query from the SQL database to get current context
 - [ ]

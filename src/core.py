@@ -5,43 +5,46 @@ from processing import funnel
 
 
 
-if __name__ == "__main__":
-
-    conf_file = 'settings.conf'
-
-    if not os.path.exists(conf_file):
-        raise FileNotFoundError(f"Could not find configuration file at: {conf_file}")
-
-    config = configparser.ConfigParser()
-    config.read(conf_file)
-
-    routes.API_KEY = config["api"]["api_key"]
-    funnel.window_length = config['processing']["window_length"]
-    DATABASE_PARAMETERS = config["postgresql"]
-
-
-    database = None 
+conf_file = 'settings.conf'
+if __name__ != "__main__":
+    sys.exit(0)
+elif not os.path.exists(conf_file):
+    raise FileNotFoundError(f"Could not find configuration file at: {conf_file}")
     
-    try:
+config = configparser.ConfigParser()
+config.read(conf_file)
 
-        database = postgresql.initialize_database(DATABASE_PARAMETERS)
+server_host = config["server"]["host"]
+server_port = int(config["server"]["port"])
+routes.API_KEY = config["api"]["api_key"]
+DATABASE_PARAMETERS = config["postgresql"]
+funnel.alpha = 2 / (int(config['processing']["window_length"]) + 1)
 
-        print("[+] Succesfully connected to KirigPlants database!")
+database = None 
+try:
 
-        synchronous_worker = threading.Thread(target=funnel.handle_queue, daemon=True)
-        synchronous_worker.start()
+    database = postgresql.initialize_database(DATABASE_PARAMETERS)
 
-        print("[+] Succesfully started synchronous funnel worker...")
+    print("[+] Succesfully connected to KirigPlants database!")
 
-        uvicorn.run("api.routes:router", host="0.0.0.0", port=8000)
-        
-    except Exception as e:
-        print(e)
+    synchronous_worker = threading.Thread(target=funnel.handle_queue, daemon=True)
+    synchronous_worker.start()
 
-    finally:
-        if database is not None:
-            database.close()
+    print("[+] Succesfully started synchronous funnel worker...")
 
-        print("[-] Safely closed the connection...") 
-        sys.exit(0)       
+    machine_learning_worker = threading.Thread(target=funnel.handle_processing, daemon=True)
+    machine_learning_worker.start()
+
+    uvicorn.run("api.routes:router", host=server_host, port=server_port)
+    
+
+except Exception as e:
+    print(e)
+
+finally:
+    if database is not None:
+        database.close()
+
+    print("[-] Safely closed the connection...") 
+    sys.exit(0)       
 
