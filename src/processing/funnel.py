@@ -2,41 +2,52 @@
 from api import postgresql, routes
 from queue import Queue
 
-import asyncio
+import asyncio, socket, math, time
 
-
-
-
-async def assign_new_context(esp_chip_id : str):
-    pass
-
-
-
+sps = 0
 alpha = 0
 context = {}
 lock = asyncio.Lock()
 
-async def iterate(esp_chip_id : str, timestamp : str, value : int):
-    global lock, context, alpha
+plotter_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+plotter_socket.setblocking(False)
 
+async def iterate(esp_chip_id : str, timestamp : str, value : int, stream : bool = False):
+    global plotter_socket, lock, context, alpha
+    
     normalized = None
     async with lock:
 
-        if esp_chip_id not in context or not context[esp_chip_id][0]:
-            context[esp_chip_id] = (True, value, 0)
+        if esp_chip_id not in context:
+            context[esp_chip_id] = (value, 0, ('127.0.0.1', 9999+len(context)) )
+
+            print(f"[+] created new output at {context[esp_chip_id][-1]}...")
+
             return value
 
-        _, previous_ema, previous_variance = context[esp_chip_id]
+        previous_ema, previous_variance, output_params = context[esp_chip_id]
 
         current_ema = value * alpha + previous_ema * (1.0 - alpha)   
-        current_variance = math.sqrt((1 - alpha) * (previous_variance + alpha * (value - previous_ema) ** 2))
-        
-        context[esp_chip_id] = (True, current_ema, current_variance)
-        
-        normalized = (value - current_ema) / max(0.00001, current_variance)
-        
-    return normalized
+        current_variance = alpha * (value - current_ema) * (value - previous_ema) + previous_variance * (1.0 - alpha)
 
-    
+        context[esp_chip_id] = (current_ema, current_variance, output_params)
+        
+        normalized = (value - current_ema) / max(math.sqrt(current_variance), 0.0001)
+
+    if stream:
+        packet = f"{normalized}\n".encode('utf-8')    
+        await asyncio.get_running_loop().sock_sendto(plotter_socket, packet, output_params)    
+
+    return normalized
+  
+
+
+
+
+
+
+
+
+
 
 

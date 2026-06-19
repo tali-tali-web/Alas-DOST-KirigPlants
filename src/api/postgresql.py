@@ -1,23 +1,26 @@
-import psycopg2, functools, os
+import psycopg, functools, os, asyncio
 
 from datetime import date, UTC, timedelta
 from api import routes
 
-class State:
-    database = None
+class Database:
+    parameters = None
 
 def if_online(func):
 
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
-        if State.database == None: 
+        if Database.database == None: 
             raise PermissionError("System is offline!")
         return func(*args, **kwargs)
     return wrapper
 
 
-def initialize_database(DATABASE_PARAMETERS):
+@if_online
+async def initialize_database(DATABASE_PARAMETERS):
     
+    async with await asyncio.AsyncConnection
+
     State.database = psycopg2.connect(**DATABASE_PARAMETERS)
     with State.database.cursor() as cursor:
 

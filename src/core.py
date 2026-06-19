@@ -19,6 +19,7 @@ server_port = int(config["server"]["port"])
 routes.API_KEY = config["api"]["api_key"]
 DATABASE_PARAMETERS = config["postgresql"]
 funnel.alpha = 2 / (int(config['processing']["window_length"]) + 1)
+funnel.sps = int(config['processing']['samples_per_second'])
 
 database = None 
 try:
@@ -26,14 +27,6 @@ try:
     database = postgresql.initialize_database(DATABASE_PARAMETERS)
 
     print("[+] Succesfully connected to KirigPlants database!")
-
-    synchronous_worker = threading.Thread(target=funnel.handle_queue, daemon=True)
-    synchronous_worker.start()
-
-    print("[+] Succesfully started synchronous funnel worker...")
-
-    machine_learning_worker = threading.Thread(target=funnel.handle_processing, daemon=True)
-    machine_learning_worker.start()
 
     uvicorn.run("api.routes:router", host=server_host, port=server_port)
     

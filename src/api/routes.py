@@ -6,6 +6,8 @@ from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field
 from datetime import datetime, timedelta, UTC
 
+import time, asyncio
+
 router = FastAPI()
 
 API_KEY = None  
@@ -29,12 +31,16 @@ async def receive_data(sensor_data : SensorData, x_api_key : str = Header()):
 
     timestep = 1 / (len(sensor_data.raw_adc) - 1)
     sensor_data.received_at = datetime.now(UTC)
-    for value in sensor_data:
+    for i, value in enumerate(sensor_data.raw_adc):
+
+        last = time.time()
 
         timestamp = sensor_data.received_at + timedelta(seconds = i * timestep)
-        returned_value = funnel.processor.iterate(sensor_data.esp_chip_id, timestamp, value)
+        returned_value = await funnel.iterate(sensor_data.esp_chip_id, timestamp, value, True)
     
-    return {"status": "received", "received_at" : data.received_at}
+        await asyncio.sleep(1 / funnel.sps - (time.time() - last))
+
+    return {"status": "received", "received_at" : sensor_data.received_at}
 
 @router.get("/")
 async def request_dashboard_redirect():
