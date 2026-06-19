@@ -14,9 +14,8 @@ API_KEY = None
 
 class SensorData(BaseModel):
     esp_chip_id : str = Field(min_length=12, max_length=12)
-    duration : float = Field(ge=2.0)
-    received_at : str
-    raw_adc : list[int] 
+    duration    : float = Field(ge=2.0)
+    data_batch  : list[int] 
 
 from processing import funnel
 from api import postgresql
@@ -28,19 +27,23 @@ async def receive_data(sensor_data : SensorData, x_api_key : str = Header()):
     if x_api_key != API_KEY and API_KEY != None:
         raise HTTPException(status_code=401, detail="Invalid API key")
 
+    received_at = datetime.now(UTC)
+    return_values = []
 
-    timestep = 1 / (len(sensor_data.raw_adc) - 1)
-    sensor_data.received_at = datetime.now(UTC)
-    for i, value in enumerate(sensor_data.raw_adc):
+    next_time = time.monotonic()
+    for i, value in enumerate(sensor_data.data_batch):
 
-        last = time.time()
+        return_values.append(await funnel.iterate(sensor_data.esp_chip_id, value, True))
 
-        timestamp = sensor_data.received_at + timedelta(seconds = i * timestep)
-        returned_value = await funnel.iterate(sensor_data.esp_chip_id, timestamp, value, True)
-    
-        await asyncio.sleep(1 / funnel.sps - (time.time() - last))
+        next_time += 1 / funnel.sps
+        sleep_duration = next_time - time.monotonic()
 
-    return {"status": "received", "received_at" : sensor_data.received_at}
+        if sleep_duration > 0:
+            await asyncio.sleep(sleep_duration)
+
+
+    await postgresql.store_data(sensor_data.esp_chip_id, return_values)
+    return {"status": "received", "completed_at" : datetime.now(UTC), "received_at" : received_at}
 
 @router.get("/")
 async def request_dashboard_redirect():

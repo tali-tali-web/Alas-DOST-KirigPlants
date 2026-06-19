@@ -12,7 +12,7 @@ lock = asyncio.Lock()
 plotter_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 plotter_socket.setblocking(False)
 
-async def iterate(esp_chip_id : str, timestamp : str, value : int, stream : bool = False):
+async def iterate(esp_chip_id : str, value : int, stream : bool = False) -> float:
     global plotter_socket, lock, context, alpha
     
     normalized = None
@@ -32,7 +32,7 @@ async def iterate(esp_chip_id : str, timestamp : str, value : int, stream : bool
 
         context[esp_chip_id] = (current_ema, current_variance, output_params)
         
-        normalized = (value - current_ema) / max(math.sqrt(current_variance), 0.0001)
+        normalized = (value - current_ema) / max(math.sqrt(max(current_variance, 0.0)), 0.0001)
 
     if stream:
         packet = f"{normalized}\n".encode('utf-8')    
