@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 from datetime import datetime, timedelta, UTC
 
 import time, asyncio
+import numpy as np
 
 router = FastAPI()
 
@@ -15,7 +16,7 @@ API_KEY = None
 class SensorData(BaseModel):
     esp_chip_id : str = Field(min_length=12, max_length=12)
     duration    : float = Field(ge=2.0)
-    data_batch  : list[int] 
+    samples  : list[int] 
 
 from processing import funnel
 from api import postgresql
@@ -28,21 +29,11 @@ async def receive_data(sensor_data : SensorData, x_api_key : str = Header()):
         raise HTTPException(status_code=401, detail="Invalid API key")
 
     received_at = datetime.now(UTC)
-    return_values = []
+    samples = np.asarray(sensor_data.samples, dtype=np.float32)
 
-    next_time = time.monotonic()
-    for i, value in enumerate(sensor_data.data_batch):
+    await funnel.iterate(sensor_data.esp_chip_id, samples)
+    await postgresql.store_data(sensor_data.esp_chip_id, samples)
 
-        return_values.append(await funnel.iterate(sensor_data.esp_chip_id, value, True))
-
-        next_time += 1 / funnel.sps
-        sleep_duration = next_time - time.monotonic()
-
-        if sleep_duration > 0:
-            await asyncio.sleep(sleep_duration)
-
-
-    await postgresql.store_data(sensor_data.esp_chip_id, return_values)
     return {"status": "received", "completed_at" : datetime.now(UTC), "received_at" : received_at}
 
 @router.get("/")

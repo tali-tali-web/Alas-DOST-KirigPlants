@@ -28,13 +28,16 @@ async def initialize_database():
                     FOREIGN KEY (device_id) REFERENCES Device(device_id)  
                 );
 
-                CREATE TABLE IF NOT EXISTS Warning (
-                    warning_id SERIAL PRIMARY KEY, 
-                    warning_code INT NOT NULL,
-                    warning_details TEXT,
+                CREATE TABLE IF NOT EXISTS Prediction (
+                    prediction_id SERIAL PRIMARY KEY,
+                    timestamp TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+
+                    light_level FLOAT NOT NULL,
+                    water_stress FLOAT NOT NULL,
+                    mechanical_stress FLOAT NOT NULL,
 
                     device_id INT NOT NULL,
-                    FOREIGN KEY (device_id) REFERENCES Device(device_id) 
+                    FOREIGN KEY (device_id) REFERENCES Device(device_id)
                 );
                 
             """

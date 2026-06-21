@@ -18,7 +18,7 @@ server_host = config["server"]["host"]
 server_port = int(config["server"]["port"])
 routes.API_KEY = config["api"]["api_key"]
 postgresql.Database.parameters = config["postgresql"]
-funnel.alpha = 2 / (int(config['processing']["window_length"]) + 1)
+funnel.window_length = int(config['processing']["window_length"])
 funnel.sps = int(config['processing']['samples_per_second'])
 
 try:
