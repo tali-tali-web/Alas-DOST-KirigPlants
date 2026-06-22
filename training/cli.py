@@ -54,11 +54,10 @@ async def intialize_database():
 
             CREATE TABLE IF NOT EXISTS Session (
                 session_id SERIAL PRIMARY KEY,
-
                 started_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-                ended_at TIMESTAMPTZ,
 
-                data_label TEXT NOT NULL,
+                ended_at TIMESTAMPTZ,
+                label TEXT,
 
                 device_id INT NOT NULL,
                 FOREIGN KEY (device_id)
@@ -100,21 +99,56 @@ class Context:
 async def store_data(context : Context, esp_chip_id : str, samples : numpy.ndarray):
     global config
 
-    async with context.lock:
-        session_id = context.active_sessions.get(esp_chip_id)
-
-    if not session_id:
-        print(f"[-] alert: device {esp_chip_id} does not have an active session...")
-        return
-
     async with await psycopg.AsyncConnection.connect(**config['postgresql']) as aconn:
         async with aconn.cursor() as acursor:
             
             device_id = await register_device_id(esp_chip_id, acursor)
 
-            parameters = [(sample, session_id,) for sample in samples]
-            await acursor.execute("INSERT INTO Sample (voltage, session_id) VALUES (%s, %s):", parameters)
+            async with context.lock:
+                session_id = context.active_sessions.get(device_id)
 
+            if not session_id:
+                print(f"[-] alert: device {device_id}[{esp_chip_id}]: does not have an active session...")
+                return
+
+            parameters = [(sample, session_id,) for sample in samples]
+            await acursor.executemany("INSERT INTO Sample (voltage, session_id) VALUES (%s, %s);", parameters)
+
+async def start_session(context : Context, device_id : int, label : str):
+    global config
+
+    async with context.lock:
+        session_id = context.active_sessions.get(device_id)
+
+    if not session_id:
+        print(f"[-] alert: device {device_id}[{esp_chip_id}]: already has an active session...")
+        return
+
+    async with await psycopg.AsyncConnection.connect(**config['postgresql']) as aconn:
+        async with aconn.cursor() as acursor:
+
+            await acursor.execute("INSERT INTO Session (label, device_id) VALUES (%s, %s) RETURNING session_id;", (label, device_id))
+
+            async with context.lock:
+                context.active_sessions[device_id] = int((await acursor.fetchone())[0])
+
+async def stop_session(context : Context, device_id : int):
+    global config
+
+    async with await psycopg.AsyncConnection.connect(**config['postgresql']) as aconn:
+        async with aconn.cursor() as acursor:
+
+            async with context.lock:
+                session_id = context.active_sessions.get(device_id)
+
+            if not session_id:
+                print(f"[-] alert: device {device_id}[{esp_chip_id}]: does not have an active session...")
+                return
+            
+            acursor.execute("UPDATE Session SET ended_at=CURRENT_TIMESTAMP WHERE session_id=%s;", (session_id,))
+
+            async with context.lock:
+                context[device_id] = None
 
 async def list_sessions():
     global config
@@ -166,7 +200,7 @@ def run_api(app : FastAPI, context : Context):
     app.state.context = context
 
     print(f"[+] initializing uvicorn at {config['server']['host']}, {config['server']['port']}...\n")
-    uvicorn.run(app, host=config['server']['host'], port=int(config['server']['port']))
+    uvicorn.run(app, host=config['server']['host'], port=int(config['server']['port']), log_level="warning")
 
 def main():
     global config, router
@@ -178,36 +212,125 @@ def main():
     api_thread.start()
 
     command = None
-    while not command in ('exit', 'q'):
-        
-        match input(">> ").strip().lower().split():
+
+    while command not in ("exit", "q"):
+
+        command = input(">> ").strip().lower()
+        match command.split():
             case []:
                 print("[-] you didn't type anything...")
 
-            case ["session", "start", id]:
+            case ["session", "start", device_id, label] if device_id.isdigit():
 
-                pass
+                session_id = asyncio.run(
+                    start_session(
+                        context=context,
+                        device_id=int(device_id),
+                        label=label
+                    )
+                )
+
+                print(
+                    f"[+] assigned device {device_id} "
+                    f"to session {session_id} "
+                    f"with label '{label}'"
+                )
+
+            case ["session", "start", device_id, _]:
+                print("[-] device id must be an integer")
+
+            case ["session", "start", *_]:
+                print(
+                    "[-] proper format:\n"
+                    "    session start <device_id> <label>"
+                )
+
+            case ["session", "stop", device_id] if device_id.isdigit():
+
+                asyncio.run(
+                    stop_session(
+                        context=context,
+                        device_id=int(device_id)
+                    )
+                )
+
+                print(f"[+] stopped session {device_id}")
+
+            case ["session", "stop", *_]:
+                print(
+                    "[-] proper format:\n"
+                    "    session stop <session_id>"
+                )
 
             case ["session", "list"]:
-                
-                for session in asyncio.run(list_sessions()):
-                    print(session)
 
-            case ["session", *wrong_args]:
-                print("[-] inappropriate arguments, just say session list :/")
-            
+                sessions = asyncio.run(list_sessions())
+
+                print(
+                    f"{'ID':<5}"
+                    f"{'DEVICE':<8}"
+                    f"{'LABEL':<15}"
+                    f"{'STARTED':<22}"
+                    f"{'ENDED'}"
+                )
+
+                print("-" * 80)
+
+                for session_id, started_at, ended_at, label, device_id in sessions:
+
+                    ended = (
+                        ended_at.strftime("%Y-%m-%d %H:%M:%S")
+                        if ended_at is not None
+                        else "ACTIVE"
+                    )
+
+                    print(
+                        f"{session_id:<5}"
+                        f"{device_id:<8}"
+                        f"{label:<15}"
+                        f"{started_at.strftime('%Y-%m-%d %H:%M:%S'):<22}"
+                        f"{ended}"
+                    )
+
+            case ["session"]:
+                print(
+                    "Available commands:\n"
+                    "    session start <device_id> <label>\n"
+                    "    session stop <session_id>\n"
+                    "    session list"
+                )
+
             case ["device", "list"]:
-                
-                for session in asyncio.run(list_devices()):
-                    print(session)
 
-            case ["device", *wrong_args]:
-                print("[-] inappropriate arguments, just say device list :/")
+                devices = asyncio.run(list_devices())
+
+                print(
+                    f"{'ID':<5}"
+                    f"{'CHIP ID':<20}"
+                    f"{'REGISTERED'}"
+                )
+
+                print("-" * 60)
+
+                for device_id, registered_at, chip_id in devices:
+                    print(
+                        f"{device_id:<5}"
+                        f"{chip_id:<20}"
+                        f"{registered_at.strftime('%Y-%m-%d %H:%M:%S')}"
+                    )
+
+            case ["device"]:
+                print(
+                    "Available commands:\n"
+                    "    device list"
+                )
+
+            case ["exit"] | ["q"]:
+                break
 
             case _:
                 print("[-] command not recognized...")
-
-
+                
     print("\n[-] exiting...\n")    
 
 if __name__ == '__main__':
