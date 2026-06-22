@@ -120,8 +120,8 @@ async def start_session(context : Context, device_id : int, label : str):
     async with context.lock:
         session_id = context.active_sessions.get(device_id)
 
-    if not session_id:
-        print(f"[-] alert: device {device_id}[{esp_chip_id}]: already has an active session...")
+    if session_id:
+        print(f"[-] alert: device {device_id}: already has an active session...")
         return
 
     async with await psycopg.AsyncConnection.connect(**config['postgresql']) as aconn:
@@ -142,13 +142,13 @@ async def stop_session(context : Context, device_id : int):
                 session_id = context.active_sessions.get(device_id)
 
             if not session_id:
-                print(f"[-] alert: device {device_id}[{esp_chip_id}]: does not have an active session...")
+                print(f"[-] alert: device {device_id}: does not have an active session...")
                 return
             
-            acursor.execute("UPDATE Session SET ended_at=CURRENT_TIMESTAMP WHERE session_id=%s;", (session_id,))
+            await acursor.execute("UPDATE Session SET ended_at=CURRENT_TIMESTAMP WHERE session_id=%s;", (session_id,))
 
             async with context.lock:
-                context[device_id] = None
+                context.active_sessions[device_id] = None
 
 async def list_sessions():
     global config
@@ -168,26 +168,20 @@ async def list_devices():
             await acursor.execute("SELECT * FROM Device;")
             return (await acursor.fetchall())
 
-
-async def process_data(raw_samples : list):
-    samples = numpy.asarray(raw_samples, dtype=numpy.int32)
-
-
-    return samples
-
 router = FastAPI()
 @router.post('/api/upload')
 async def receive_data(request : Request, sensor_packet : SensorPacket, api_key : str = Header()):
     global config
 
     if api_key != config['api']['api_key'] and config['api']['api_key'] != None:
+        (f"[-] alert: unathenticated device {sensor_packet.esp_chip_id}...")
         return {"receieved" : None}
     
     if abs(len(sensor_packet.samples) / sensor_packet.duration - float(config['processing']['samples_per_second'])) > 1:
         warnings.warn("[-] Warning: detecting incoming sensor_packets mistmatch with expected samples per second...", RuntimeWarning)
 
     received_at = datetime.now(UTC)
-    samples     = await process_data(sensor_packet.samples)
+    samples     = numpy.asarray(sensor_packet.samples, dtype=numpy.int32)
     
     await store_data(request.app.state.context, sensor_packet.esp_chip_id, samples)
 
