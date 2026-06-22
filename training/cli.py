@@ -97,22 +97,23 @@ class Context:
         self.active_sessions = {}
         self.lock = asyncio.Lock()
 
-async def store_data(context : Context, esp_chip_id : str, samples : list):
+async def store_data(context : Context, esp_chip_id : str, samples : numpy.ndarray):
     global config
 
-    with context.lock:
+    async with context.lock:
         session_id = context.active_sessions.get(esp_chip_id)
 
     if not session_id:
-        
+        print(f"[-] alert: device {esp_chip_id} does not have an active session...")
         return
-    
 
     async with await psycopg.AsyncConnection.connect(**config['postgresql']) as aconn:
         async with aconn.cursor() as acursor:
             
             device_id = await register_device_id(esp_chip_id, acursor)
-            
+
+            parameters = [(sample, session_id,) for sample in samples]
+            await acursor.execute("INSERT INTO Sample (voltage, session_id) VALUES (%s, %s):", parameters)
 
 
 async def list_sessions():
@@ -154,7 +155,7 @@ async def receive_data(request : Request, sensor_packet : SensorPacket, api_key 
     received_at = datetime.now(UTC)
     samples     = await process_data(sensor_packet.samples)
     
-    await store_data(request.app.context, sensor_packet.esp_chip_id, samples)
+    await store_data(request.app.state.context, sensor_packet.esp_chip_id, samples)
 
     return {"received" : received_at}
 
