@@ -1,0 +1,23 @@
+# Virtual environments
+.venv/
+venv/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# PyTorch models
+*.pt
+*.pth
+
+# VS Code
+.vscode/
+
+# JetBrains
+.idea/
+
+# Environment variables
+.env
+
+# Linux junk
+.DS_Store

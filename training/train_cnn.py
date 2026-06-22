@@ -104,6 +104,7 @@ async def store_data(context : Context, esp_chip_id : str, samples : list):
         session_id = context.active_sessions.get(esp_chip_id)
 
     if not session_id:
+        
         return
     
 
