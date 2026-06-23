@@ -1,5 +1,0 @@
-* [33m6cdfb11[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m)[m fxing what is wrong
-* [33ma90aaae[m adding a collector for the data, i have so little time left please help
-* [33m4489bbd[m Preparing for machine learning
-* [33mca69819[m succesfully installed psycopg version3 and made some adjustments to how the data will be stored into the database!
-* [33m417af04[m I made the pre-processing work. The async awaits are pretty sketchy since it's calling it per iteration but unfortunately there's nothign else I can do right now to rush it. Next is replacing psycopg2 with the more modern psycopg3 that can handle async functions so it wouldn't block the entire program. I Managed to set the stream data result of entire porject by a netcat function whose output is directed into a ttyplot and i will have to replace this soon.
