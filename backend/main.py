@@ -1,4 +1,7 @@
 import configparser, asyncio, uvicorn, warnings, numpy, threading
+import matplotlib
+matplotlib.use("TkAgg")
+import matplotlib.pyplot as plt
 
 from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.templating import Jinja2Templates
@@ -195,6 +198,47 @@ def main(context):
                 print(
                     "Available commands:\n"
                     "    device list"
+                )
+
+            case ["plot", session_id, limit] if limit.isdigit() and session_id.isdigit():
+                rows = asyncio.run(postgresql.request_session_data(
+                    context=context,
+                    session_id=int(session_id),
+                    limit=int(limit)
+                ))
+
+                if not rows:
+                    print(f"[-] session {sessiond_id} does not exist")
+
+                timestamps = [row[1] for row in rows]
+                values = [row[0] for row in rows]
+
+                plt.figure(figsize=(12, 4))
+                plt.plot(timestamps, values)
+
+                plt.xlabel("Time")
+                plt.ylabel("Signal")
+                plt.title("Plant Signal")
+
+                plt.grid(True)
+                plt.tight_layout()
+                plt.show()
+
+            case ["plot", *_]:
+                print(
+                    "[-] usage: plot <session_id> [limit]"
+                )
+
+            case ["export", session_id, filename] if session_id.isdigit():
+                asyncio.run(postgresql.export_session(
+                    context=context,
+                    session_id=int(session_id),
+                    filename=filename
+                ))
+
+            case ["export", *_]:
+                print(
+                    "[-] usage: export <session_id> [filename.csv]"
                 )
 
             case ["exit"] | ["q"]:

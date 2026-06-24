@@ -80,6 +80,8 @@ async function updateChart() {
 
     const data = await res.json();
 
+    data.reverse();
+
     chart.data.labels = data.map((_, i) => i);
     chart.data.datasets[0].data = data.map(x => x.value);
 

@@ -97,11 +97,47 @@ async def request_data(context : Context, esp_chip_id, limit : int):
                     SELECT voltage, timestamp 
                     FROM sample 
                     WHERE session_id=%s 
-                    ORDER BY timestamp ASC 
+                    ORDER BY sample_id DESC
                     LIMIT %s;"""
 
             await acursor.execute(query, (session_id, limit,))
             return await acursor.fetchall()
+
+async def request_session_data(context : Context, session_id : int, limit : int):
+    
+    config = context.config
+    async with await psycopg.AsyncConnection.connect(**config['postgresql']) as aconn:
+        async with aconn.cursor() as acursor:
+            
+            query = """
+                SELECT *
+                FROM Session
+                WHERE session_id=%s
+                LIMIT 1;
+            """
+            await acursor.execute(query, (session_id,))
+            session = await acursor.fetchone()
+
+            if not session:
+                print(f"[-] no session found {session_id}")
+                return
+
+            query = """
+                SELECT voltage, sample_id
+                FROM Sample
+                WHERE session_id=%s
+                ORDER BY sample_id ASC
+            """
+
+            if limit > 0:
+                query += " LIMIT %s;"
+                await acursor.execute(query, (session_id, limit,))
+            else:
+                query += ";"
+                await acursor.execute(query, (session_id,))
+
+            return await acursor.fetchall()
+
 
 async def start_session(context : Context, device_id : int, label : str):
 
@@ -148,6 +184,20 @@ async def stop_session(context : Context, device_id : int):
                 context.active_sessions[device_id] = None
     
     print(f"[+] stopped session  of device {device_id}")
+
+async def export_session(context : Context, session_id : int, filename : str):
+
+    config = context.config
+    async with await psycopg.AsyncConnection.connect(**config['postgresql']) as aconn:
+        async with aconn.cursor() as acursor:
+            
+            rows = await request_session_data(context, session_id, -1)
+
+            with open(filename, "w", encoding="utf-8") as f:
+
+                f.write("value,timestamp\n")
+                for value, timestamp in rows:
+                    f.write(f"{value},{timestamp}\n")
 
 async def list_sessions(context : Context):
 
