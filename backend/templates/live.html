@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Plant Signal Monitor</title>
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+
+<body class="bg-gray-900 text-white h-screen overflow-hidden">
+
+<div class="flex h-full">
+
+    <!-- Sidebar -->
+    <div class="w-64 bg-gray-800 border-r border-gray-700 flex flex-col">
+
+        <div class="p-4 border-b border-gray-700">
+            <h1 class="text-xl font-bold">
+                Devices
+            </h1>
+        </div>
+
+        <div
+            id="device-list"
+            class="flex-1 overflow-y-auto p-2 space-y-2"
+        >
+            <!-- Devices inserted by JS -->
+        </div>
+
+    </div>
+
+    <!-- Main Content -->
+    <div class="flex-1 p-6 overflow-auto">
+
+        <div class="mb-6">
+
+            <h1
+                id="device-title"
+                class="text-3xl font-bold"
+            >
+                No Device Selected
+            </h1>
+
+            <p
+                id="status"
+                class="text-gray-400 mt-2"
+            >
+                Waiting for selection...
+            </p>
+
+        </div>
+
+        <div class="bg-gray-800 rounded-xl p-4">
+
+            <canvas id="signalChart"></canvas>
+
+        </div>
+
+    </div>
+
+</div>
+
+<script src="/static/app.js"></script>
+
+</body>
+</html>

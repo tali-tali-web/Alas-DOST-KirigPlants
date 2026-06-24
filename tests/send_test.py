@@ -1,6 +1,7 @@
 
 import time
 import requests
+import random
 
 URL = "http://127.0.0.1:8000/api/upload"
 
@@ -17,7 +18,7 @@ sample_counter = 0
 while True:
 
     samples = [
-        i
+        random.randint(-32678, 32678)
         for i in range(
             sample_counter,
             sample_counter + BATCH_SIZE

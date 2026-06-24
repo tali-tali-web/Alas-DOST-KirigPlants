@@ -1,47 +1,30 @@
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-
 import configparser, asyncio, uvicorn, warnings, numpy, threading
 
 from fastapi import FastAPI, Header, HTTPException, Request
+from fastapi.templating import Jinja2Templates
+from fastapi.responses import RedirectResponse
+from fastapi.staticfiles import StaticFiles
+
 from datetime import datetime, timedelta, UTC
 from pydantic import BaseModel, Field
 
-
 import postgresql
 
-class StressTestCNN(nn.Module):
-
-    def __init__(self):
-        super().__init__()
-
-        self.layers = nn.ModuleList([
-            nn.Conv1d(1, 16, 5),
-            nn.ReLU(),
-            nn.MaxPool1d(2),
-
-            nn.Conv1d(16, 32, 5),
-            nn.ReLU(),
-            nn.MaxPool1d(2),
-        ])
-
-    def forward(self, x):
-        for layer in self.layers:
-            x = layer(x)
 
 class SensorPacket(BaseModel):
     esp_chip_id   : str = Field(min_length=12, max_length=12)
     duration    : float = Field(ge=1)
     samples : list[int]
 
+
 router = FastAPI()
 @router.post('/api/upload')
 async def receive_data(request : Request, sensor_packet : SensorPacket, api_key : str = Header()):
-    global config
 
+    context = request.app.state.context
+    config = context.config
     if api_key != config['api']['api_key'] and config['api']['api_key'] != None:
-        (f"[-] alert: unathenticated device {sensor_packet.esp_chip_id}...")
+        print(f"[-] alert: unathenticated device {sensor_packet.esp_chip_id}...")
         return {"receieved" : None}
     
     if abs(len(sensor_packet.samples) / sensor_packet.duration - float(config['processing']['samples_per_second'])) > 1:
@@ -50,15 +33,59 @@ async def receive_data(request : Request, sensor_packet : SensorPacket, api_key 
     received_at = datetime.now(UTC)
     samples     = numpy.asarray(sensor_packet.samples, dtype=numpy.int32)
     
-    await postgresql.store_data(request.app.state.context, sensor_packet.esp_chip_id, samples)
+    await postgresql.store_data(context, sensor_packet.esp_chip_id, samples)
 
     return {"received" : received_at}
 
+@router.get("/api/download")
+async def request_data(request : Request, esp_chip_id : str, limit : int = 5000):
 
-def run_api(app : FastAPI, context : postgresql.Context):
-    global config
+    context = request.app.state.context
+    samples = await postgresql.request_data(context, esp_chip_id, limit)
+
+    if not samples:
+        return []
+
+    return_ = []
+    for sample in samples:
+        value, timestamp = sample
+
+        return_.append({"value" : value, "timestamp" : timestamp})
+
+    return return_
+
+@router.get("/api/devices")
+async def request_devices(request : Request):
+
+    devices = await postgresql.list_devices(request.app.state.context)
+    
+    output = [
+        {
+            "id": row[0],
+            "created_at": row[1].isoformat(),
+            "esp_chip_id": row[2]
+        }
+        for row in devices
+    ]
+
+    return output
+
+@router.get("/dashboard")
+async def live_dashboard(request : Request):
+
+    templates = request.app.state.templates
+    return templates.TemplateResponse(request=request, name="/live.html")
+
+@router.get("/")
+async def redirect_dashboard(request : Request):
+    return RedirectResponse(url="/dashboard")
+
+def run_api(app : FastAPI, context : postgresql.Context, templates : Jinja2Templates):
 
     app.state.context = context
+    app.state.templates = templates
+
+    config = context.config
 
     print(f"[+] initializing uvicorn at {config['server']['host']}, {config['server']['port']}...\n")
     uvicorn.run(app, host=config['server']['host'], port=int(config['server']['port']), log_level="warning")
@@ -180,13 +207,22 @@ def main(context):
 
 if __name__ == '__main__':
 
+
     config = configparser.ConfigParser()
     config.read('settings.conf')
 
+    templates = Jinja2Templates(directory="./backend/templates")
     context = postgresql.Context(config)
+
+    router.mount(
+        "/static",
+        StaticFiles(directory="./backend/static"),
+        name="static"
+    )
+
     asyncio.run(postgresql.intialize_database(context))
 
-    api_thread = threading.Thread(target=run_api, args=(router, context,), daemon=True)
+    api_thread = threading.Thread(target=run_api, args=(router, context, templates,), daemon=True)
     api_thread.start()
 
     main(context)

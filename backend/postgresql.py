@@ -1,5 +1,5 @@
 
-import psycopg, asyncio, configparser, numpy
+import psycopg, asyncio, configparser, numpy, fastapi
 
 class Context:
     def __init__(self, config : configparser.ConfigParser):
@@ -78,6 +78,30 @@ async def store_data(context : Context, esp_chip_id : str, samples : numpy.ndarr
 
             parameters = [(sample, session_id,) for sample in samples]
             await acursor.executemany("INSERT INTO Sample (voltage, session_id) VALUES (%s, %s);", parameters)
+
+async def request_data(context : Context, esp_chip_id, limit : int):
+    
+    config = context.config
+    async with await psycopg.AsyncConnection.connect(**config['postgresql']) as aconn:
+        async with aconn.cursor() as acursor:
+
+            device_id = await register_device_id(esp_chip_id, acursor)
+            async with context.lock:
+                session_id = context.active_sessions.get(device_id)
+
+            if not session_id:
+                print(f"[-] alert: device {device_id}[{esp_chip_id}]: does not have an active session...")
+                return
+
+            query = """
+                    SELECT voltage, timestamp 
+                    FROM sample 
+                    WHERE session_id=%s 
+                    ORDER BY timestamp ASC 
+                    LIMIT %s;"""
+
+            await acursor.execute(query, (session_id, limit,))
+            return await acursor.fetchall()
 
 async def start_session(context : Context, device_id : int, label : str):
 
