@@ -50,6 +50,105 @@
 
         </div>
 
+        <div class="bg-gray-800 rounded-xl p-4 border border-gray-700 mb-4">
+
+            <div class="flex flex-col lg:flex-row gap-3 lg:items-end">
+
+                <div class="flex-1">
+                    <label
+                        for="session-label"
+                        class="block text-xs uppercase text-gray-400 mb-2"
+                    >
+                        Recording Label
+                    </label>
+                    <input
+                        id="session-label"
+                        class="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-white"
+                        value="control"
+                    >
+                </div>
+
+                <div class="flex gap-2">
+                    <button
+                        id="label-control"
+                        class="px-3 py-2 rounded-lg bg-gray-700 hover:bg-gray-600"
+                    >
+                        Control
+                    </button>
+                    <button
+                        id="label-stimulus"
+                        class="px-3 py-2 rounded-lg bg-gray-700 hover:bg-gray-600"
+                    >
+                        Stimulus
+                    </button>
+                </div>
+
+                <div class="flex gap-2">
+                    <button
+                        id="start-session"
+                        class="px-4 py-2 rounded-lg bg-green-600 hover:bg-green-500 font-bold"
+                    >
+                        Start
+                    </button>
+                    <button
+                        id="stop-session"
+                        class="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-500 font-bold"
+                    >
+                        Stop
+                    </button>
+                </div>
+
+            </div>
+
+            <div
+                id="recording-status"
+                class="text-sm text-gray-400 mt-3"
+            >
+                No active recording
+            </div>
+
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+
+            <div class="bg-gray-800 rounded-xl p-4 border border-gray-700">
+                <div class="text-xs uppercase text-gray-400">
+                    Prediction
+                </div>
+                <div
+                    id="prediction-label"
+                    class="text-2xl font-bold mt-2"
+                >
+                    -
+                </div>
+            </div>
+
+            <div class="bg-gray-800 rounded-xl p-4 border border-gray-700">
+                <div class="text-xs uppercase text-gray-400">
+                    Confidence
+                </div>
+                <div
+                    id="prediction-confidence"
+                    class="text-2xl font-bold mt-2"
+                >
+                    -
+                </div>
+            </div>
+
+            <div class="bg-gray-800 rounded-xl p-4 border border-gray-700">
+                <div class="text-xs uppercase text-gray-400">
+                    Window
+                </div>
+                <div
+                    id="prediction-window"
+                    class="text-2xl font-bold mt-2"
+                >
+                    -
+                </div>
+            </div>
+
+        </div>
+
         <div class="bg-gray-800 rounded-xl p-4">
 
             <canvas id="signalChart"></canvas>

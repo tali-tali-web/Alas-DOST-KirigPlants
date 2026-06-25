@@ -8,6 +8,17 @@ from sklearn.metrics import accuracy_score, classification_report
 
 WINDOW_SIZE = 128
 
+def normalize_window(window):
+
+    window = np.asarray(window, dtype=np.float32)
+    std = window.std()
+
+    if std == 0:
+        return window - window.mean()
+
+    return (window - window.mean()) / std
+
+
 def create_windows(values, label):
     X = []
     y = []
@@ -17,7 +28,7 @@ def create_windows(values, label):
         len(values) - WINDOW_SIZE,
         WINDOW_SIZE
     ):
-        X.append(values[i:i + WINDOW_SIZE])
+        X.append(normalize_window(values[i:i + WINDOW_SIZE]))
         y.append(label)
 
     return X, y

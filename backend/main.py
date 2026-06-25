@@ -1,4 +1,4 @@
-import configparser, asyncio, uvicorn, warnings, numpy, threading
+import configparser, asyncio, uvicorn, warnings, numpy, threading, joblib
 import matplotlib
 matplotlib.use("TkAgg")
 import matplotlib.pyplot as plt
@@ -13,11 +13,81 @@ from pydantic import BaseModel, Field
 
 import postgresql
 
+WINDOW_SIZE = 128
+PREDICTION_WINDOWS = 4
+SMOOTHING_ALPHA = 0.25
+WIND_ON_THRESHOLD = 0.60
+WIND_OFF_THRESHOLD = 0.40
+CLASS_LABELS = {
+    0: "Control",
+    1: "Wind"
+}
+prediction_state = {}
+
+
+def normalize_window(values):
+
+    window = numpy.asarray(values, dtype=numpy.float32)
+    std = window.std()
+
+    if std == 0:
+        return window - window.mean()
+
+    return (window - window.mean()) / std
+
+
+def smooth_prediction(esp_chip_id, average_probability):
+
+    wind_index = list(model.classes_).index(1)
+    wind_probability = float(average_probability[wind_index])
+
+    state = prediction_state.get(
+        esp_chip_id,
+        {
+            "wind_probability": wind_probability,
+            "prediction": int(model.classes_[numpy.argmax(average_probability)])
+        }
+    )
+
+    smoothed_wind_probability = (
+        SMOOTHING_ALPHA * wind_probability
+        + (1 - SMOOTHING_ALPHA) * state["wind_probability"]
+    )
+
+    prediction = state["prediction"]
+
+    if smoothed_wind_probability >= WIND_ON_THRESHOLD:
+        prediction = 1
+    elif smoothed_wind_probability <= WIND_OFF_THRESHOLD:
+        prediction = 0
+
+    prediction_state[esp_chip_id] = {
+        "wind_probability": smoothed_wind_probability,
+        "prediction": prediction
+    }
+
+    confidence = (
+        smoothed_wind_probability
+        if prediction == 1
+        else 1 - smoothed_wind_probability
+    )
+
+    return prediction, confidence, smoothed_wind_probability, wind_probability
+
 
 class SensorPacket(BaseModel):
     esp_chip_id   : str = Field(min_length=12, max_length=12)
     duration    : float = Field(ge=1)
     samples : list[int]
+
+
+class SessionRequest(BaseModel):
+    device_id: int
+    label: str = Field(min_length=1, max_length=64)
+
+
+class StopSessionRequest(BaseModel):
+    device_id: int
 
 
 router = FastAPI()
@@ -60,18 +130,123 @@ async def request_data(request : Request, esp_chip_id : str, limit : int = 5000)
 @router.get("/api/devices")
 async def request_devices(request : Request):
 
-    devices = await postgresql.list_devices(request.app.state.context)
+    context = request.app.state.context
+    devices = await postgresql.list_devices(context)
     
     output = [
         {
             "id": row[0],
+            "device_id": row[0],
             "created_at": row[1].isoformat(),
-            "esp_chip_id": row[2]
+            "esp_chip_id": row[2],
+            "active_session_id": context.active_sessions.get(row[0])
         }
         for row in devices
     ]
 
     return output
+
+@router.post("/api/session/start")
+async def start_recording(request : Request, session_request : SessionRequest):
+
+    context = request.app.state.context
+    session_id = await postgresql.start_session(
+        context=context,
+        device_id=session_request.device_id,
+        label=session_request.label
+    )
+
+    if not session_id:
+        raise HTTPException(
+            status_code=409,
+            detail="Device already has an active session"
+        )
+
+    return {
+        "device_id": session_request.device_id,
+        "session_id": session_id,
+        "label": session_request.label
+    }
+
+@router.post("/api/session/stop")
+async def stop_recording(request : Request, session_request : StopSessionRequest):
+
+    context = request.app.state.context
+    session_id = await postgresql.stop_session(
+        context=context,
+        device_id=session_request.device_id
+    )
+
+    if not session_id:
+        raise HTTPException(
+            status_code=404,
+            detail="Device does not have an active session"
+        )
+
+    return {
+        "device_id": session_request.device_id,
+        "session_id": session_id
+    }
+
+model = joblib.load("rf_model.joblib")
+@router.get("/api/predict")
+async def predict(request: Request, esp_chip_id: str):
+    context = request.app.state.context
+
+    requested_samples = WINDOW_SIZE * PREDICTION_WINDOWS
+    samples = await postgresql.request_data(context, esp_chip_id, requested_samples)
+    if not samples:
+        return {
+            "prediction": None,
+            "label": "No active session",
+            "confidence": None,
+            "sample_count": 0,
+            "window_size": WINDOW_SIZE
+        }
+
+    available_windows = len(samples) // WINDOW_SIZE
+
+    if available_windows == 0:
+        return {
+            "prediction": None,
+            "label": "Collecting",
+            "confidence": None,
+            "sample_count": len(samples),
+            "window_size": WINDOW_SIZE
+        }
+
+    samples = list(reversed(samples[:available_windows * WINDOW_SIZE]))
+    values = [sample[0] for sample in samples]
+    X = []
+
+    for start in range(0, len(values), WINDOW_SIZE):
+        window = values[start:start + WINDOW_SIZE]
+        X.append(normalize_window(window))
+
+    X = numpy.asarray(X, dtype=numpy.float32)
+    probabilities = numpy.asarray(model.predict_proba(X), dtype=numpy.float32)
+    average_probability = probabilities.mean(axis=0)
+
+    prediction, confidence, smoothed_wind_probability, instant_wind_probability = (
+        smooth_prediction(esp_chip_id, average_probability)
+    )
+
+    return {
+        "prediction": prediction,
+        "label": CLASS_LABELS.get(prediction, str(prediction)),
+        "confidence": confidence,
+        "sample_count": len(samples),
+        "window_size": WINDOW_SIZE,
+        "windows_used": available_windows,
+        "class_probabilities": {
+            CLASS_LABELS.get(int(label), str(label)): float(probability)
+            for label, probability in zip(model.classes_, average_probability)
+        },
+        "instant_wind_probability": instant_wind_probability,
+        "smoothed_wind_probability": smoothed_wind_probability,
+        "raw_mean": float(numpy.mean(values)),
+        "raw_std": float(numpy.std(values))
+    }
 
 @router.get("/dashboard")
 async def live_dashboard(request : Request):
@@ -208,7 +383,7 @@ def main(context):
                 ))
 
                 if not rows:
-                    print(f"[-] session {sessiond_id} does not exist")
+                    print(f"[-] session {session_id} does not exist")
 
                 timestamps = [row[1] for row in rows]
                 values = [row[0] for row in rows]

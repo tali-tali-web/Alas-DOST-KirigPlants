@@ -163,6 +163,7 @@ async def start_session(context : Context, device_id : int, label : str):
         f"to session {session_id} "
         f"with label '{label}'"
     )
+    return session_id
 
 
 async def stop_session(context : Context, device_id : int):
@@ -184,6 +185,7 @@ async def stop_session(context : Context, device_id : int):
                 context.active_sessions[device_id] = None
     
     print(f"[+] stopped session  of device {device_id}")
+    return session_id
 
 async def export_session(context : Context, session_id : int, filename : str):
 
@@ -216,4 +218,3 @@ async def list_devices(context : Context):
             
             await acursor.execute("SELECT * FROM Device;")
             return (await acursor.fetchall())
-
