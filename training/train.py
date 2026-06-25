@@ -6,9 +6,25 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score, classification_report
 
+from scipy.signal import periodogram
+import matplotlib.pyplot as plt
+
 WINDOW_SIZE = 128
 
-def normalize_window(window):
+from scipy.signal import butter, filtfilt
+
+def lowpass_filter(values, cutoff=2.0, fs=32.0):
+
+    b, a = butter(
+        N=4,
+        Wn=cutoff,
+        btype="low",
+        fs=fs
+    )
+
+    return filtfilt(b, a, values)
+
+def process_window(window):
 
     window = np.asarray(window, dtype=np.float32)
     std = window.std()
@@ -23,12 +39,9 @@ def create_windows(values, label):
     X = []
     y = []
 
-    for i in range(
-        0,
-        len(values) - WINDOW_SIZE,
-        WINDOW_SIZE
-    ):
-        X.append(normalize_window(values[i:i + WINDOW_SIZE]))
+    for i in range(0, len(values) - WINDOW_SIZE, WINDOW_SIZE):
+        window = process_window(values[i:i + WINDOW_SIZE])
+        X.append(lowpass_filter(window))
         y.append(label)
 
     return X, y

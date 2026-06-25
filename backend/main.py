@@ -24,8 +24,20 @@ CLASS_LABELS = {
 }
 prediction_state = {}
 
+from scipy.signal import butter, filtfilt
 
-def normalize_window(values):
+def lowpass_filter(values, cutoff=2.0, fs=32.0):
+
+    b, a = butter(
+        N=4,
+        Wn=cutoff,
+        btype="low",
+        fs=fs
+    )
+
+    return filtfilt(b, a, values)
+
+def process_window(values):
 
     window = numpy.asarray(values, dtype=numpy.float32)
     std = window.std()
@@ -221,7 +233,7 @@ async def predict(request: Request, esp_chip_id: str):
 
     for start in range(0, len(values), WINDOW_SIZE):
         window = values[start:start + WINDOW_SIZE]
-        X.append(normalize_window(window))
+        X.append(lowpass_filter(process_window(window)))
 
     X = numpy.asarray(X, dtype=numpy.float32)
     probabilities = numpy.asarray(model.predict_proba(X), dtype=numpy.float32)
