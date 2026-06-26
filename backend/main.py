@@ -1,4 +1,8 @@
-import configparser, asyncio, uvicorn, warnings, numpy, threading, joblib
+import configparser, asyncio, uvicorn, warnings, numpy, threading, joblib, sys
+
+if sys.platform == "win32":
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+
 import matplotlib
 matplotlib.use("TkAgg")
 import matplotlib.pyplot as plt
